@@ -12,31 +12,56 @@ import { fetchSzseSummary } from './services/exchange-szse';
 import { pushToFeishu } from './services/feishu';
 import { summarizeWithLLM } from './services/llm';
 import { reconcileSnapshots } from './services/reconcile';
-import type { AlertState, Env, MarketDailySnapshot, MarketSignal, RuntimeState, SourceSnapshot } from './types';
+import type { AlertState, Env, MarketDailySnapshot, MarketSignal, RuntimeState } from './types';
 
 function json(data: Record<string, unknown>, status = 200): Response {
   return Response.json(data, { status });
 }
 
-function fallbackSummary(snapshot: MarketDailySnapshot, signal: MarketSignal): string {
+function formatYi(value: number): string {
+  return `${(value / 1e8).toFixed(2)}亿元`;
+}
+
+function fallbackHeadline(signal: MarketSignal): string {
   const cn = {
-    hot: '过热',
-    warm: '偏热',
-    neutral: '中性',
-    cool: '偏冷',
-    cold: '过冷',
+    hot: '杠杆资金延续升温，盘后情绪仍偏热。',
+    warm: '杠杆情绪继续回暖，盘后整体偏积极。',
+    neutral: '两融情绪总体平稳，盘后仍偏中性。',
+    cool: '杠杆情绪边际降温，盘后转向谨慎。',
+    cold: '杠杆情绪明显转冷，盘后偏弱。',
   } as const;
+  return cn[signal.sentimentLevel];
+}
+
+function buildDailyCommentary(
+  headline: string,
+  snapshot: MarketDailySnapshot,
+  signal: MarketSignal,
+  previousSnapshot?: MarketDailySnapshot,
+): string {
+  const dayCompare = previousSnapshot
+    ? `融资余额较昨日${snapshot.financingBalance >= previousSnapshot.financingBalance ? '增加' : '减少'} ${formatYi(Math.abs(snapshot.financingBalance - previousSnapshot.financingBalance))}，当日融资净买入较昨日${snapshot.financingNetBuy >= previousSnapshot.financingNetBuy ? '增加' : '减少'} ${formatYi(Math.abs(snapshot.financingNetBuy - previousSnapshot.financingNetBuy))}。`
+    : '当前库中缺少昨日快照，暂不展示日环比对比。';
+
+  const alertLine = signal.alertState === 'overheat'
+    ? '当前已触发过热预警，短期需要留意杠杆情绪是否继续堆积。'
+    : signal.alertState === 'cooling'
+      ? '当前已触发转冷预警，短期需要留意杠杆资金是否继续回落。'
+      : '当前未触发额外预警，市场情绪仍以存量变化为主。';
+
   return [
-    `今日结论：${cn[signal.sentimentLevel]}`,
-    `融资余额 ${snapshot.financingBalance}，当日融资净买入 ${snapshot.financingNetBuy}。`,
-    `5日融资净买入 ${signal.financingNetBuy5d}，融资余额分位 ${signal.financingBalancePct250}。`,
-  ].join(' ');
+    headline,
+    `融资余额 ${formatYi(snapshot.financingBalance)}，两融余额 ${formatYi(snapshot.marginBalanceTotal)}。`,
+    dayCompare,
+    `当日融资净买入 ${formatYi(snapshot.financingNetBuy)}，5日累计 ${formatYi(signal.financingNetBuy5d)}。`,
+    alertLine,
+  ].join('\n');
 }
 
 function alertReason(signal: MarketSignal): string {
   return signal.alertState === 'overheat'
-    ? `融资余额分位 ${signal.financingBalancePct250}，5日融资净买入分位 ${signal.financingNetBuy5dPct250}`
-    : `5日融资净买入分位 ${signal.financingNetBuy5dPct250}，短期杠杆资金明显转弱`;
+    ? `融资余额分位 ${signal.financingBalancePct250}%，5日融资净买入分位 ${signal.financingNetBuy5dPct250}%` 
+    : `5日融资净买入分位 ${signal.financingNetBuy5dPct250}%，短期杠杆资金明显转弱`;
 }
 
 async function fetchSources(env: Env) {
@@ -59,14 +84,16 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
     const historyRows = (await listRecentSnapshots(env.WATCHER_DB, config.lookbackDays))
       .filter((row) => row.tradeDate !== snapshot.tradeDate)
       .reverse();
+    const previousSnapshot = historyRows.at(-1);
     const signal = buildSignal(snapshot, [...historyRows, snapshot]);
 
-    let summary = fallbackSummary(snapshot, signal);
+    let headline = fallbackHeadline(signal);
     try {
-      summary = await summarizeWithLLM(config, env.AI, snapshot, signal);
+      headline = await summarizeWithLLM(config, env.AI, snapshot, signal, previousSnapshot);
     } catch {
-      summary = fallbackSummary(snapshot, signal);
+      headline = fallbackHeadline(signal);
     }
+    const summary = buildDailyCommentary(headline, snapshot, signal, previousSnapshot);
 
     const enrichedSignal: MarketSignal = { ...signal, summaryText: summary };
     await upsertMarketDailySnapshot(env.WATCHER_DB, snapshot);
@@ -77,6 +104,7 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
       tradeDate: snapshot.tradeDate,
       summary,
       snapshot,
+      previousSnapshot,
       signal: enrichedSignal,
     });
     const uploaded = await uploadDetailedReportToCos(config, report, now);

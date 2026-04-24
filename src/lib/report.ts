@@ -34,9 +34,10 @@ export function buildDetailedReport(input: {
   summary: string;
   reportUrl?: string;
   snapshot: MarketDailySnapshot;
+  previousSnapshot?: MarketDailySnapshot;
   signal: MarketSignal;
 }): string {
-  const { generatedAt, tradeDate, summary, snapshot, signal } = input;
+  const { generatedAt, tradeDate, summary, snapshot, previousSnapshot, signal } = input;
   const financingShare = snapshot.marginBalanceTotal > 0
     ? ((snapshot.financingBalance / snapshot.marginBalanceTotal) * 100).toFixed(2)
     : '0.00';
@@ -83,13 +84,17 @@ export function buildDetailedReport(input: {
     `| 融资余额占两融余额比重 | ${financingShare}% |`,
     `| 融券余额占两融余额比重 | ${lendingShare}% |`,
     '',
-    '## 四、历史位置与预警解释',
+    '## 四、今日 vs 昨日',
+    '',
+    previousSnapshot ? buildDayOverDayTable(snapshot, previousSnapshot) : '- 当前库中缺少昨日快照，因此暂不展示日环比对比。',
+    '',
+    '## 五、历史位置与预警解释',
     '',
     percentileNarrative(signal),
     '',
     alertNarrative(snapshot, signal),
     '',
-    '## 五、观察与备注',
+    '## 六、观察与备注',
     '',
     '- 第一版只覆盖全市场总览，不覆盖行业、宽基与个股。',
     '- 若交易所页面结构变化，官方数据可能暂时降级为东方财富补位。',
@@ -101,8 +106,26 @@ export function buildDetailedReport(input: {
   return lines.join('\n');
 }
 
+function buildDayOverDayTable(today: MarketDailySnapshot, previous: MarketDailySnapshot): string {
+  return [
+    '| 指标 | 今日 | 昨日 | 变化 |',
+    '| --- | --- | --- | --- |',
+    `| 融资余额 | ${formatYi(today.financingBalance)} | ${formatYi(previous.financingBalance)} | ${formatDelta(today.financingBalance - previous.financingBalance)} |`,
+    `| 融券余额 | ${formatYi(today.securitiesLendingBalance)} | ${formatYi(previous.securitiesLendingBalance)} | ${formatDelta(today.securitiesLendingBalance - previous.securitiesLendingBalance)} |`,
+    `| 两融余额 | ${formatYi(today.marginBalanceTotal)} | ${formatYi(previous.marginBalanceTotal)} | ${formatDelta(today.marginBalanceTotal - previous.marginBalanceTotal)} |`,
+    `| 当日融资买入额 | ${formatYi(today.financingBuy)} | ${formatYi(previous.financingBuy)} | ${formatDelta(today.financingBuy - previous.financingBuy)} |`,
+    `| 当日融资偿还额 | ${formatYi(today.financingRepay)} | ${formatYi(previous.financingRepay)} | ${formatDelta(today.financingRepay - previous.financingRepay)} |`,
+    `| 当日融资净买入额 | ${formatYi(today.financingNetBuy)} | ${formatYi(previous.financingNetBuy)} | ${formatDelta(today.financingNetBuy - previous.financingNetBuy)} |`,
+  ].join('\n');
+}
+
 function formatYi(value: number): string {
   return `${(value / 1e8).toFixed(2)}亿元`;
+}
+
+function formatDelta(value: number): string {
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${(value / 1e8).toFixed(2)}亿元`;
 }
 
 function formatPct(value: number): string {
