@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "a-share-margin-sentiment-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-24",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    "crons": ["0 9 * * *"]
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "RUNTIME_KV",
+      "id": "REPLACE_KV_ID",
+      "preview_id": "REPLACE_KV_PREVIEW_ID"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "WATCHER_DB",
+      "database_name": "a-share-margin-sentiment-worker",
+      "database_id": "REPLACE_D1_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "RUN_HOUR_LOCAL": "17",
+    "RUN_MINUTE_LOCAL": "0",
+    "MARKET_TIMEZONE": "Asia/Shanghai",
+    "HEARTBEAT_INTERVAL_HOURS": "24",
+    "REQUEST_TIMEOUT_MS": "15000",
+    "LOOKBACK_DAYS": "250",
+    "ALERT_COOLDOWN_HOURS": "24",
+    "FAILURE_ALERT_THRESHOLD": "1",
+    "FAILURE_ALERT_COOLDOWN_MINUTES": "180",
+    "LLM_MODEL": "@cf/meta/llama-3.1-8b-instruct"
+  }
+}
