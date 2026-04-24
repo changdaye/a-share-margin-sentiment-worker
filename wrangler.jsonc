@@ -9,7 +9,9 @@
     "enabled": true
   },
   "triggers": {
-    "crons": ["0 9 * * *"]
+    "crons": [
+      "0 9 * * *"
+    ]
   },
   "ai": {
     "binding": "AI"
@@ -17,15 +19,15 @@
   "kv_namespaces": [
     {
       "binding": "RUNTIME_KV",
-      "id": "REPLACE_KV_ID",
-      "preview_id": "REPLACE_KV_PREVIEW_ID"
+      "id": "5b4680e64da141fda737fb21949c82e4",
+      "preview_id": "4666b9f426284274b4a0a4f9120979bd"
     }
   ],
   "d1_databases": [
     {
       "binding": "WATCHER_DB",
       "database_name": "a-share-margin-sentiment-worker",
-      "database_id": "REPLACE_D1_ID",
+      "database_id": "e2419b54-d88b-4760-86d7-b0db6fe75fce",
       "migrations_dir": "migrations"
     }
   ],
