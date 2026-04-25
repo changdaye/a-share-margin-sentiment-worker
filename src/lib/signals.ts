@@ -9,6 +9,9 @@ export function buildSignal(current: MarketDailySnapshot, history: MarketDailySn
   const financingBalances = history.map((row) => row.financingBalance);
   const netBuys = history.map((row) => row.financingNetBuy);
   const lendingBalances = history.map((row) => row.securitiesLendingBalance);
+  const marketVolumes = history
+    .map((row) => row.marketVolumeShares)
+    .filter((value): value is number => typeof value === 'number');
   const rolling5 = history.map((_, index, rows) => sumLast(rows.slice(0, index + 1).map((row) => row.financingNetBuy), 5));
   const last5NetBuy = sumLast(netBuys, 5);
   const last10NetBuy = sumLast(netBuys, 10);
@@ -16,6 +19,9 @@ export function buildSignal(current: MarketDailySnapshot, history: MarketDailySn
   const financingNetBuy1dPct250 = percentileRank(netBuys, current.financingNetBuy);
   const financingNetBuy5dPct250 = percentileRank(rolling5, last5NetBuy);
   const lendingBalancePct250 = percentileRank(lendingBalances, current.securitiesLendingBalance);
+  const marketVolumePct250 = typeof current.marketVolumeShares === 'number' && marketVolumes.length > 0
+    ? percentileRank(marketVolumes, current.marketVolumeShares)
+    : undefined;
 
   let sentimentLevel: SentimentLevel = 'neutral';
   if (financingBalancePct250 >= 95 || financingNetBuy5dPct250 >= 90) sentimentLevel = 'hot';
@@ -35,6 +41,7 @@ export function buildSignal(current: MarketDailySnapshot, history: MarketDailySn
     financingNetBuy5dPct250,
     financingNetBuy10d: Number(last10NetBuy.toFixed(2)),
     lendingBalancePct250,
+    marketVolumePct250,
     sentimentLevel,
     alertState,
     summaryText: '',
@@ -42,6 +49,7 @@ export function buildSignal(current: MarketDailySnapshot, history: MarketDailySn
       financingBalance: current.financingBalance,
       financingNetBuy: current.financingNetBuy,
       securitiesLendingBalance: current.securitiesLendingBalance,
+      marketVolumeShares: current.marketVolumeShares,
     }),
   };
 }

@@ -18,14 +18,14 @@ class FakeD1Database {
                 trade_date: args[0], source_strategy: args[1], sse_available: args[2], szse_available: args[3], eastmoney_used: args[4],
                 financing_balance: args[5], securities_lending_balance: args[6], margin_balance_total: args[7],
                 financing_buy: args[8], financing_repay: args[9], financing_net_buy: args[10],
-                lending_sell: args[11], lending_repay: args[12], lending_net_sell: args[13], raw_payload_json: args[14],
+                lending_sell: args[11], lending_repay: args[12], lending_net_sell: args[13], market_volume_shares: args[14], raw_payload_json: args[15],
               });
             } else if (sql.includes('INSERT INTO market_daily_signals')) {
               db.signals = db.signals.filter((row) => row.trade_date !== args[0]);
               db.signals.push({
                 trade_date: args[0], financing_balance_pct_250: args[1], financing_net_buy_1d_pct_250: args[2], financing_net_buy_5d: args[3],
-                financing_net_buy_5d_pct_250: args[4], financing_net_buy_10d: args[5], lending_balance_pct_250: args[6],
-                sentiment_level: args[7], alert_state: args[8], summary_text: args[9], metrics_json: args[10],
+                financing_net_buy_5d_pct_250: args[4], financing_net_buy_10d: args[5], lending_balance_pct_250: args[6], market_volume_pct_250: args[7],
+                sentiment_level: args[8], alert_state: args[9], summary_text: args[10], metrics_json: args[11],
               });
             } else if (sql.includes('INSERT INTO notification_runs')) {
               db.notifications.push({ run_type: args[2], message_text: args[4], report_url: args[5] });
@@ -64,6 +64,19 @@ describe('admin routes', () => {
               S_RZYE: 80, S_RQYE: 2, S_RZMRE: 8, S_RZRQYE: 82, S_RZRQYECZ: 80, S_RQMCL: 1,
               TOTAL_RZYE: 180, TOTAL_RQYE: 5, TOTAL_RZMRE: 17, TOTAL_RZRQYE: 185, TOTAL_RZRQYECZ: 181,
             }],
+          },
+        }));
+      }
+      if (url.includes('web.ifzq.gtimg.cn/appstock/app/fqkline/get')) {
+        return new Response(JSON.stringify({
+          code: 0,
+          data: {
+            sh000002: {
+              day: [['2026-04-24', '0', '0', '0', '0', '604375690.000']],
+            },
+            sz399107: {
+              day: [['2026-04-24', '0', '0', '0', '0', '709560997.000']],
+            },
           },
         }));
       }
@@ -123,6 +136,7 @@ describe('admin routes', () => {
     expect(body.ok).toBe(true);
     expect(body.reportUrl).toContain('myqcloud.com');
     expect(db.snapshots).toHaveLength(1);
+    expect(db.snapshots[0]?.market_volume_shares).toBe(131393668700);
     expect(db.notifications.length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -26,10 +26,13 @@ export async function summarizeWithLLM(
     `5日融资净买入: ${signal.financingNetBuy5d}`,
     `融资余额分位: ${signal.financingBalancePct250}`,
     `5日融资净买入分位: ${signal.financingNetBuy5dPct250}`,
+    typeof snapshot.marketVolumeShares === 'number' ? `A股成交量: ${snapshot.marketVolumeShares}` : '',
+    typeof signal.marketVolumePct250 === 'number' ? `A股成交量分位: ${signal.marketVolumePct250}` : '',
     `情绪标签: ${signal.sentimentLevel}`,
     `预警状态: ${signal.alertState}`,
     previousSnapshot ? `昨日融资余额: ${previousSnapshot.financingBalance}` : '',
     previousSnapshot ? `昨日融资净买入: ${previousSnapshot.financingNetBuy}` : '',
+    typeof previousSnapshot?.marketVolumeShares === 'number' ? `昨日A股成交量: ${previousSnapshot.marketVolumeShares}` : '',
   ].filter(Boolean).join('\n');
 
   const result = await ai.run(config.llmModel, {

@@ -1,3 +1,4 @@
+import { buildMetricComparisonRows, formatRelativeChangeText } from './comparison';
 import type { MarketDailySnapshot, MarketSignal } from '../types';
 
 const PREFIX = 'a-share-margin-sentiment-worker';
@@ -35,6 +36,7 @@ export function buildDetailedReport(input: {
   reportUrl?: string;
   snapshot: MarketDailySnapshot;
   previousSnapshot?: MarketDailySnapshot;
+  historicalSnapshots?: MarketDailySnapshot[];
   signal: MarketSignal;
 }): string {
   const { generatedAt, tradeDate, summary, snapshot, previousSnapshot, signal } = input;
@@ -44,6 +46,11 @@ export function buildDetailedReport(input: {
   const lendingShare = snapshot.marginBalanceTotal > 0
     ? ((snapshot.securitiesLendingBalance / snapshot.marginBalanceTotal) * 100).toFixed(2)
     : '0.00';
+  const comparisonRows = buildMetricComparisonRows({
+    snapshot,
+    signal,
+    historicalSnapshots: input.historicalSnapshots ?? [],
+  });
 
   const lines = [
     '# A股两融情绪日报详细版',
@@ -68,6 +75,7 @@ export function buildDetailedReport(input: {
     `- 东方财富兜底：${snapshot.eastmoneyUsed ? '已启用' : '未启用'}`,
     `- 最终采用口径：${sourceStrategyText(snapshot.sourceStrategy)}`,
     sourceNarrative(snapshot),
+    snapshot.marketVolumeShares ? '- A股成交量：补充使用腾讯公开A股指数日线（上证A股指数 + 深证A指）估算。' : undefined,
     '',
     '## 三、市场总览',
     '',
@@ -81,6 +89,7 @@ export function buildDetailedReport(input: {
     `| 当日融资净买入额 | ${formatYi(snapshot.financingNetBuy)} |`,
     `| 5日融资净买入累计 | ${formatYi(signal.financingNetBuy5d)} |`,
     `| 10日融资净买入累计 | ${formatYi(signal.financingNetBuy10d)} |`,
+    snapshot.marketVolumeShares ? `| A股成交量 | ${formatYiShares(snapshot.marketVolumeShares)} |` : undefined,
     `| 融资余额占两融余额比重 | ${financingShare}% |`,
     `| 融券余额占两融余额比重 | ${lendingShare}% |`,
     '',
@@ -88,13 +97,17 @@ export function buildDetailedReport(input: {
     '',
     previousSnapshot ? buildDayOverDayTable(snapshot, previousSnapshot) : '- 当前库中缺少昨日快照，因此暂不展示日环比对比。',
     '',
-    '## 五、历史位置与预警解释',
+    '## 五、今日 vs 历史中位数 / 本月均值',
+    '',
+    comparisonRows.length > 0 ? buildMedianAndMonthlyTable(comparisonRows) : '- 当前库中可用历史不足，暂不展示历史中位数与本月均值对比。',
+    '',
+    '## 六、历史位置与预警解释',
     '',
     percentileNarrative(signal),
     '',
     alertNarrative(snapshot, signal),
     '',
-    '## 六、观察与备注',
+    '## 七、观察与备注',
     '',
     '- 第一版只覆盖全市场总览，不覆盖行业、宽基与个股。',
     '- 若交易所页面结构变化，官方数据可能暂时降级为东方财富补位。',
@@ -107,15 +120,29 @@ export function buildDetailedReport(input: {
 }
 
 function buildDayOverDayTable(today: MarketDailySnapshot, previous: MarketDailySnapshot): string {
-  return [
+  const rows = [
     '| 指标 | 今日 | 昨日 | 变化 |',
     '| --- | --- | --- | --- |',
-    `| 融资余额 | ${formatYi(today.financingBalance)} | ${formatYi(previous.financingBalance)} | ${formatDelta(today.financingBalance - previous.financingBalance)} |`,
-    `| 融券余额 | ${formatYi(today.securitiesLendingBalance)} | ${formatYi(previous.securitiesLendingBalance)} | ${formatDelta(today.securitiesLendingBalance - previous.securitiesLendingBalance)} |`,
-    `| 两融余额 | ${formatYi(today.marginBalanceTotal)} | ${formatYi(previous.marginBalanceTotal)} | ${formatDelta(today.marginBalanceTotal - previous.marginBalanceTotal)} |`,
-    `| 当日融资买入额 | ${formatYi(today.financingBuy)} | ${formatYi(previous.financingBuy)} | ${formatDelta(today.financingBuy - previous.financingBuy)} |`,
-    `| 当日融资偿还额 | ${formatYi(today.financingRepay)} | ${formatYi(previous.financingRepay)} | ${formatDelta(today.financingRepay - previous.financingRepay)} |`,
-    `| 当日融资净买入额 | ${formatYi(today.financingNetBuy)} | ${formatYi(previous.financingNetBuy)} | ${formatDelta(today.financingNetBuy - previous.financingNetBuy)} |`,
+    `| 融资余额 | ${formatYi(today.financingBalance)} | ${formatYi(previous.financingBalance)} | ${formatRelativeChangeText(today.financingBalance, previous.financingBalance)} |`,
+    `| 融券余额 | ${formatYi(today.securitiesLendingBalance)} | ${formatYi(previous.securitiesLendingBalance)} | ${formatRelativeChangeText(today.securitiesLendingBalance, previous.securitiesLendingBalance)} |`,
+    `| 两融余额 | ${formatYi(today.marginBalanceTotal)} | ${formatYi(previous.marginBalanceTotal)} | ${formatRelativeChangeText(today.marginBalanceTotal, previous.marginBalanceTotal)} |`,
+    `| 当日融资买入额 | ${formatYi(today.financingBuy)} | ${formatYi(previous.financingBuy)} | ${formatRelativeChangeText(today.financingBuy, previous.financingBuy)} |`,
+    `| 当日融资偿还额 | ${formatYi(today.financingRepay)} | ${formatYi(previous.financingRepay)} | ${formatRelativeChangeText(today.financingRepay, previous.financingRepay)} |`,
+    `| 当日融资净买入额 | ${formatYi(today.financingNetBuy)} | ${formatYi(previous.financingNetBuy)} | ${formatRelativeChangeText(today.financingNetBuy, previous.financingNetBuy)} |`,
+  ];
+
+  if (typeof today.marketVolumeShares === 'number' && typeof previous.marketVolumeShares === 'number') {
+    rows.push(`| A股成交量 | ${formatYiShares(today.marketVolumeShares)} | ${formatYiShares(previous.marketVolumeShares)} | ${formatRelativeChangeText(today.marketVolumeShares, previous.marketVolumeShares)} |`);
+  }
+
+  return rows.join('\n');
+}
+
+function buildMedianAndMonthlyTable(rows: ReturnType<typeof buildMetricComparisonRows>): string {
+  return [
+    '| 指标 | 今日 | 历史中位数 | 较中位数 | 本月均值 | 较本月均值 |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...rows.map((row) => `| ${row.label} | ${row.currentText} | ${row.medianText} | ${row.medianChangeText} | ${row.monthAverageText} | ${row.monthAverageChangeText} |`),
   ].join('\n');
 }
 
@@ -123,13 +150,12 @@ function formatYi(value: number): string {
   return `${(value / 1e8).toFixed(2)}亿元`;
 }
 
-function formatDelta(value: number): string {
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${(value / 1e8).toFixed(2)}亿元`;
-}
-
 function formatPct(value: number): string {
   return `${Number(value.toFixed(2))}%`;
+}
+
+function formatYiShares(value: number): string {
+  return `${(value / 1e8).toFixed(2)}亿股`;
 }
 
 function sourceStrategyText(value: MarketDailySnapshot['sourceStrategy']): string {
@@ -160,6 +186,9 @@ function percentileNarrative(signal: MarketSignal): string {
   ];
   if (typeof signal.lendingBalancePct250 === 'number') {
     parts.push(`- 融券余额分位约为 ${formatPct(signal.lendingBalancePct250)}，当前更多作为辅助背景，不作为主判断依据。`);
+  }
+  if (typeof signal.marketVolumePct250 === 'number') {
+    parts.push(`- A股成交量分位约为 ${formatPct(signal.marketVolumePct250)}，说明交投活跃度处在 ${positionText(signal.marketVolumePct250)}。`);
   }
   return parts.join('\n');
 }

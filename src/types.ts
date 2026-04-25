@@ -73,6 +73,7 @@ export interface MarketDailySnapshot {
   lendingSell?: number;
   lendingRepay?: number;
   lendingNetSell?: number;
+  marketVolumeShares?: number;
   rawPayloadJson: string;
 }
 
@@ -87,10 +88,17 @@ export interface MarketSignal {
   financingNetBuy5dPct250: number;
   financingNetBuy10d: number;
   lendingBalancePct250?: number;
+  marketVolumePct250?: number;
   sentimentLevel: SentimentLevel;
   alertState: AlertState;
   summaryText: string;
   metricsJson: string;
+}
+
+export interface MarketVolumeSnapshot {
+  tradeDate: string;
+  marketVolumeShares: number;
+  rawPayload: unknown;
 }
 
 export interface RuntimeState {

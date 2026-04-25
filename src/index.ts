@@ -1,18 +1,23 @@
 import { parseConfig } from './config';
 import { insertNotificationRun, listRecentSnapshots, upsertMarketDailySnapshot, upsertMarketSignal } from './db';
 import { authorizeAdminRequest } from './lib/admin';
+import { buildComparisonNarrative, buildMetricComparisonRows, formatRelativeChangeText } from './lib/comparison';
 import { buildSignal } from './lib/signals';
 import { buildAlertMessage, buildDailyMessage, buildFailureAlertMessage, buildHeartbeatMessage } from './lib/message';
 import { buildDetailedReport } from './lib/report';
 import { getRuntimeState, recordFailure, recordSuccess, setRuntimeState, shouldSendDirectionalAlert, shouldSendFailureAlert, shouldSendHeartbeat } from './lib/runtime';
 import { uploadDetailedReportToCos } from './services/cos';
+import { fetchAshareMarketVolume } from './services/a-share-volume';
 import { fetchEastmoneySummary } from './services/eastmoney';
 import { fetchSseSummary } from './services/exchange-sse';
 import { fetchSzseSummary } from './services/exchange-szse';
 import { pushToFeishu } from './services/feishu';
+import { attachMarketVolumeToSnapshot, bootstrapHistoryIfNeeded } from './services/history-backfill';
 import { summarizeWithLLM } from './services/llm';
 import { reconcileSnapshots } from './services/reconcile';
 import type { AlertState, Env, MarketDailySnapshot, MarketSignal, RuntimeState } from './types';
+
+const COMPARISON_HISTORY_LIMIT = 2000;
 
 function json(data: Record<string, unknown>, status = 200): Response {
   return Response.json(data, { status });
@@ -20,6 +25,10 @@ function json(data: Record<string, unknown>, status = 200): Response {
 
 function formatYi(value: number): string {
   return `${(value / 1e8).toFixed(2)}亿元`;
+}
+
+function formatYiShares(value: number): string {
+  return `${(value / 1e8).toFixed(2)}亿股`;
 }
 
 function fallbackHeadline(signal: MarketSignal): string {
@@ -37,10 +46,11 @@ function buildDailyCommentary(
   headline: string,
   snapshot: MarketDailySnapshot,
   signal: MarketSignal,
+  comparisonNarrative?: string,
   previousSnapshot?: MarketDailySnapshot,
 ): string {
   const dayCompare = previousSnapshot
-    ? `融资余额较昨日${snapshot.financingBalance >= previousSnapshot.financingBalance ? '增加' : '减少'} ${formatYi(Math.abs(snapshot.financingBalance - previousSnapshot.financingBalance))}，当日融资净买入较昨日${snapshot.financingNetBuy >= previousSnapshot.financingNetBuy ? '增加' : '减少'} ${formatYi(Math.abs(snapshot.financingNetBuy - previousSnapshot.financingNetBuy))}。`
+    ? `融资余额较昨日${formatRelativeChangeText(snapshot.financingBalance, previousSnapshot.financingBalance)}，当日融资净买入较昨日${formatRelativeChangeText(snapshot.financingNetBuy, previousSnapshot.financingNetBuy)}。`
     : '当前库中缺少昨日快照，暂不展示日环比对比。';
 
   const alertLine = signal.alertState === 'overheat'
@@ -49,13 +59,21 @@ function buildDailyCommentary(
       ? '当前已触发转冷预警，短期需要留意杠杆资金是否继续回落。'
       : '当前未触发额外预警，市场情绪仍以存量变化为主。';
 
+  const volumeLine = typeof snapshot.marketVolumeShares === 'number'
+    ? typeof previousSnapshot?.marketVolumeShares === 'number'
+      ? `A股成交量 ${formatYiShares(snapshot.marketVolumeShares)}，较昨日${formatRelativeChangeText(snapshot.marketVolumeShares, previousSnapshot.marketVolumeShares)}。`
+      : `A股成交量 ${formatYiShares(snapshot.marketVolumeShares)}。`
+    : undefined;
+
   return [
     headline,
     `融资余额 ${formatYi(snapshot.financingBalance)}，两融余额 ${formatYi(snapshot.marginBalanceTotal)}。`,
     dayCompare,
     `当日融资净买入 ${formatYi(snapshot.financingNetBuy)}，5日累计 ${formatYi(signal.financingNetBuy5d)}。`,
+    volumeLine,
+    comparisonNarrative,
     alertLine,
-  ].join('\n');
+  ].filter((line): line is string => Boolean(line)).join('\n');
 }
 
 function alertReason(signal: MarketSignal): string {
@@ -66,26 +84,39 @@ function alertReason(signal: MarketSignal): string {
 
 async function fetchSources(env: Env) {
   const config = parseConfig(env);
-  const [sse, szse, eastmoney] = await Promise.all([
+  const [sse, szse, eastmoney, marketVolume] = await Promise.all([
     fetchSseSummary(config).catch(() => undefined),
     fetchSzseSummary(config).catch(() => undefined),
     fetchEastmoneySummary(config).catch(() => undefined),
+    fetchAshareMarketVolume(config).catch(() => undefined),
   ]);
-  return { config, sse, szse, eastmoney };
+  return { config, sse, szse, eastmoney, marketVolume };
 }
 
 export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailySnapshot; signal: MarketSignal; reportUrl: string }> {
-  const { config, sse, szse, eastmoney } = await fetchSources(env);
+  const { config, sse, szse, eastmoney, marketVolume } = await fetchSources(env);
   const runtime = await getRuntimeState(env.RUNTIME_KV);
   const now = new Date();
 
   try {
-    const snapshot = reconcileSnapshots({ sse, szse, eastmoney });
-    const historyRows = (await listRecentSnapshots(env.WATCHER_DB, config.lookbackDays))
+    const snapshot = attachMarketVolumeToSnapshot(reconcileSnapshots({ sse, szse, eastmoney }), marketVolume);
+    try {
+      await bootstrapHistoryIfNeeded(env.WATCHER_DB, config);
+    } catch (error) {
+      console.warn('history bootstrap skipped after failure', error);
+    }
+    const historyRows = (await listRecentSnapshots(env.WATCHER_DB, COMPARISON_HISTORY_LIMIT))
       .filter((row) => row.tradeDate !== snapshot.tradeDate)
       .reverse();
     const previousSnapshot = historyRows.at(-1);
-    const signal = buildSignal(snapshot, [...historyRows, snapshot]);
+    const signalHistoryRows = historyRows.slice(-config.lookbackDays);
+    const signal = buildSignal(snapshot, [...signalHistoryRows, snapshot]);
+    const comparisonNarrative = buildComparisonNarrative(buildMetricComparisonRows({
+      snapshot,
+      signal,
+      historicalSnapshots: historyRows,
+      previousSnapshot,
+    }));
 
     let headline = fallbackHeadline(signal);
     try {
@@ -93,7 +124,7 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
     } catch {
       headline = fallbackHeadline(signal);
     }
-    const summary = buildDailyCommentary(headline, snapshot, signal, previousSnapshot);
+    const summary = buildDailyCommentary(headline, snapshot, signal, comparisonNarrative, previousSnapshot);
 
     const enrichedSignal: MarketSignal = { ...signal, summaryText: summary };
     await upsertMarketDailySnapshot(env.WATCHER_DB, snapshot);
@@ -105,6 +136,7 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
       summary,
       snapshot,
       previousSnapshot,
+      historicalSnapshots: historyRows,
       signal: enrichedSignal,
     });
     const uploaded = await uploadDetailedReportToCos(config, report, now);

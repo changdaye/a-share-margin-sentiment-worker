@@ -6,8 +6,8 @@ export async function upsertMarketDailySnapshot(db: D1Database, snapshot: Market
       trade_date, source_strategy, sse_available, szse_available, eastmoney_used,
       financing_balance, securities_lending_balance, margin_balance_total,
       financing_buy, financing_repay, financing_net_buy,
-      lending_sell, lending_repay, lending_net_sell, raw_payload_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      lending_sell, lending_repay, lending_net_sell, market_volume_shares, raw_payload_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(trade_date) DO UPDATE SET
       source_strategy = excluded.source_strategy,
       sse_available = excluded.sse_available,
@@ -22,6 +22,7 @@ export async function upsertMarketDailySnapshot(db: D1Database, snapshot: Market
       lending_sell = excluded.lending_sell,
       lending_repay = excluded.lending_repay,
       lending_net_sell = excluded.lending_net_sell,
+      market_volume_shares = excluded.market_volume_shares,
       raw_payload_json = excluded.raw_payload_json
   `).bind(
     snapshot.tradeDate,
@@ -38,6 +39,7 @@ export async function upsertMarketDailySnapshot(db: D1Database, snapshot: Market
     snapshot.lendingSell ?? null,
     snapshot.lendingRepay ?? null,
     snapshot.lendingNetSell ?? null,
+    snapshot.marketVolumeShares ?? null,
     snapshot.rawPayloadJson,
   ).run();
 }
@@ -47,7 +49,7 @@ export async function listRecentSnapshots(db: D1Database, limit: number): Promis
     SELECT trade_date, source_strategy, sse_available, szse_available, eastmoney_used,
       financing_balance, securities_lending_balance, margin_balance_total,
       financing_buy, financing_repay, financing_net_buy,
-      lending_sell, lending_repay, lending_net_sell, raw_payload_json
+      lending_sell, lending_repay, lending_net_sell, market_volume_shares, raw_payload_json
     FROM market_daily_snapshots ORDER BY trade_date DESC LIMIT ?
   `).bind(limit).all();
   return (result.results ?? []).map((row: any) => ({
@@ -65,6 +67,7 @@ export async function listRecentSnapshots(db: D1Database, limit: number): Promis
     lendingSell: row.lending_sell == null ? undefined : Number(row.lending_sell),
     lendingRepay: row.lending_repay == null ? undefined : Number(row.lending_repay),
     lendingNetSell: row.lending_net_sell == null ? undefined : Number(row.lending_net_sell),
+    marketVolumeShares: row.market_volume_shares == null ? undefined : Number(row.market_volume_shares),
     rawPayloadJson: row.raw_payload_json,
   }));
 }
@@ -74,8 +77,8 @@ export async function upsertMarketSignal(db: D1Database, signal: MarketSignal): 
     INSERT INTO market_daily_signals (
       trade_date, financing_balance_pct_250, financing_net_buy_1d_pct_250,
       financing_net_buy_5d, financing_net_buy_5d_pct_250, financing_net_buy_10d,
-      lending_balance_pct_250, sentiment_level, alert_state, summary_text, metrics_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      lending_balance_pct_250, market_volume_pct_250, sentiment_level, alert_state, summary_text, metrics_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(trade_date) DO UPDATE SET
       financing_balance_pct_250 = excluded.financing_balance_pct_250,
       financing_net_buy_1d_pct_250 = excluded.financing_net_buy_1d_pct_250,
@@ -83,6 +86,7 @@ export async function upsertMarketSignal(db: D1Database, signal: MarketSignal): 
       financing_net_buy_5d_pct_250 = excluded.financing_net_buy_5d_pct_250,
       financing_net_buy_10d = excluded.financing_net_buy_10d,
       lending_balance_pct_250 = excluded.lending_balance_pct_250,
+      market_volume_pct_250 = excluded.market_volume_pct_250,
       sentiment_level = excluded.sentiment_level,
       alert_state = excluded.alert_state,
       summary_text = excluded.summary_text,
@@ -95,6 +99,7 @@ export async function upsertMarketSignal(db: D1Database, signal: MarketSignal): 
     signal.financingNetBuy5dPct250,
     signal.financingNetBuy10d,
     signal.lendingBalancePct250 ?? null,
+    signal.marketVolumePct250 ?? null,
     signal.sentimentLevel,
     signal.alertState,
     signal.summaryText,

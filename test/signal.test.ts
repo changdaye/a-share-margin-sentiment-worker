@@ -23,6 +23,7 @@ describe('buildSignal', () => {
       financingBuy: 25,
       financingRepay: 10,
       financingNetBuy: 15,
+      marketVolumeShares: 131393668700,
       rawPayloadJson: '{}',
     };
 
@@ -38,11 +39,13 @@ describe('buildSignal', () => {
       financingBuy: 10,
       financingRepay: 9,
       financingNetBuy: 1,
+      marketVolumeShares: 100000000000 + i * 10000000,
       rawPayloadJson: '{}',
     }));
 
     const signal = buildSignal(current, [...history, current]);
     expect(signal.sentimentLevel).toBe('hot');
     expect(signal.alertState).toBe('overheat');
+    expect(signal.marketVolumePct250).toBe(100);
   });
 });

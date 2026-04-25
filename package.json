@@ -10,7 +10,11 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run test",
-    "check:cloudflare-account": "node scripts/check-cloudflare-account.mjs"
+    "check:cloudflare-account": "node scripts/check-cloudflare-account.mjs",
+    "backfill:history:local": "node scripts/backfill-history.mjs --local",
+    "backfill:history:remote": "node scripts/backfill-history.mjs --remote",
+    "backfill:recent:local": "node scripts/backfill-history.mjs --local --recent",
+    "backfill:recent:remote": "node scripts/backfill-history.mjs --remote --recent"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260422.1",
