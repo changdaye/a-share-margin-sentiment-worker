@@ -8,7 +8,7 @@ export async function uploadDetailedReportToCos(config: AppConfig, content: stri
   const baseUrl = config.cosBaseUrl.replace(/\/+$/, '');
   const objectUrl = `${baseUrl}/${key}`;
   const url = new URL(objectUrl);
-  const contentType = 'text/markdown; charset=utf-8';
+  const contentType = 'text/html; charset=utf-8';
   const date = now.toUTCString();
   const signedHeaders = new Map<string, string>([
     ['content-type', contentType],

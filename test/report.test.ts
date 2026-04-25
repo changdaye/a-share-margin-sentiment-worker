@@ -3,7 +3,7 @@ import { buildDetailedReport, buildDetailedReportObjectKey } from '../src/lib/re
 
 describe('report helpers', () => {
   it('uses the project-prefixed UTC key', () => {
-    expect(buildDetailedReportObjectKey(new Date('2026-04-24T01:02:03Z'))).toBe('a-share-margin-sentiment-worker/20260424010203.md');
+    expect(buildDetailedReportObjectKey(new Date('2026-04-24T01:02:03Z'))).toBe('a-share-margin-sentiment-worker/20260424010203.html');
   });
 
   it('includes richer sections, formatted metrics, alert reasoning, and day-over-day comparison', () => {
@@ -11,7 +11,7 @@ describe('report helpers', () => {
       generatedAt: new Date('2026-04-24T01:02:03Z'),
       tradeDate: '2026-04-23',
       summary: '杠杆资金延续升温，盘后情绪仍偏热。',
-      reportUrl: 'https://cos.example/report.md',
+      reportUrl: 'https://cos.example/report.html',
       snapshot: {
         tradeDate: '2026-04-23',
         sourceStrategy: 'mixed',
@@ -135,15 +135,16 @@ describe('report helpers', () => {
       },
     });
 
-    expect(report).toContain('## 一、核心判断');
-    expect(report).toContain('## 二、数据来源与采用口径');
-    expect(report).toContain('## 三、市场总览');
-    expect(report).toContain('## 四、今日 vs 昨日');
-    expect(report).toContain('## 五、今日 vs 历史中位数 / 本月均值');
-    expect(report).toContain('## 六、历史位置与预警解释');
-    expect(report).toContain('## 七、观察与备注');
-    expect(report).toContain('| 指标 | 今日 | 昨日 | 变化 |');
-    expect(report).toContain('| 指标 | 今日 | 历史中位数 | 较中位数 | 本月均值 | 较本月均值 |');
+    expect(report).toContain('<!doctype html>');
+    expect(report).toContain('<h2>一、核心判断</h2>');
+    expect(report).toContain('<h2>二、数据来源与采用口径</h2>');
+    expect(report).toContain('<h2>三、市场总览</h2>');
+    expect(report).toContain('<h2>四、今日 vs 昨日</h2>');
+    expect(report).toContain('<h2>五、今日 vs 历史中位数 / 本月均值</h2>');
+    expect(report).toContain('<h2>六、历史位置与预警解释</h2>');
+    expect(report).toContain('<h2>七、观察与备注</h2>');
+    expect(report).toContain('<th>今日</th><th>昨日</th><th>变化</th>');
+    expect(report).toContain('<th>历史中位数</th><th>较中位数</th><th>本月均值</th><th>较本月均值</th>');
     expect(report).toContain('26957.68亿元');
     expect(report).toContain('1313.94亿股');
     expect(report).toContain('深交所官方源当次未成功获取');

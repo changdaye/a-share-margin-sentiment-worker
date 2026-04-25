@@ -17,6 +17,23 @@ const ALERT_LABELS = {
   cooling: '转冷预警',
 } as const;
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatMultilineText(value: string): string {
+  return escapeHtml(value).replace(/\n/g, '<br />');
+}
+
+function listHtml(items: string[]): string {
+  return `<ul>${items.map((item) => `<li>${formatMultilineText(item)}</li>`).join('')}</ul>`;
+}
+
 export function buildDetailedReportObjectKey(now = new Date()): string {
   const stamp = [
     now.getUTCFullYear(),
@@ -26,7 +43,7 @@ export function buildDetailedReportObjectKey(now = new Date()): string {
     String(now.getUTCMinutes()).padStart(2, '0'),
     String(now.getUTCSeconds()).padStart(2, '0'),
   ].join('');
-  return `${PREFIX}/${stamp}.md`;
+  return `${PREFIX}/${stamp}.html`;
 }
 
 export function buildDetailedReport(input: {
@@ -52,98 +69,143 @@ export function buildDetailedReport(input: {
     historicalSnapshots: input.historicalSnapshots ?? [],
   });
 
-  const lines = [
-    '# A股两融情绪日报详细版',
-    '',
-    `- 生成时间: ${generatedAt.toISOString()}`,
-    `- 交易日期: ${tradeDate}`,
-    input.reportUrl ? `- 报告链接: ${input.reportUrl}` : undefined,
-    '',
-    '## 一、核心判断',
-    '',
-    summary,
-    '',
-    `- 情绪标签：${SENTIMENT_LABELS[signal.sentimentLevel]}`,
-    `- 当前触发状态：${ALERT_LABELS[signal.alertState]}`,
-    `- 融资余额历史分位：${formatPct(signal.financingBalancePct250)}`,
-    `- 5日融资净买入历史分位：${formatPct(signal.financingNetBuy5dPct250)}`,
-    '',
-    '## 二、数据来源与采用口径',
-    '',
-    `- 上交所官方源：${snapshot.sseAvailable ? '成功' : '失败'}`,
-    `- 深交所官方源：${snapshot.szseAvailable ? '成功' : '失败'}`,
-    `- 东方财富兜底：${snapshot.eastmoneyUsed ? '已启用' : '未启用'}`,
-    `- 最终采用口径：${sourceStrategyText(snapshot.sourceStrategy)}`,
+  const sourceItems = [
+    `上交所官方源：${snapshot.sseAvailable ? '成功' : '失败'}`,
+    `深交所官方源：${snapshot.szseAvailable ? '成功' : '失败'}`,
+    `东方财富兜底：${snapshot.eastmoneyUsed ? '已启用' : '未启用'}`,
+    `最终采用口径：${sourceStrategyText(snapshot.sourceStrategy)}`,
     sourceNarrative(snapshot),
-    snapshot.marketVolumeShares ? '- A股成交量：补充使用腾讯公开A股指数日线（上证A股指数 + 深证A指）估算。' : undefined,
-    '',
-    '## 三、市场总览',
-    '',
-    '| 指标 | 数值 |',
-    '| --- | --- |',
-    `| 融资余额 | ${formatYi(snapshot.financingBalance)} |`,
-    `| 融券余额 | ${formatYi(snapshot.securitiesLendingBalance)} |`,
-    `| 两融余额 | ${formatYi(snapshot.marginBalanceTotal)} |`,
-    `| 当日融资买入额 | ${formatYi(snapshot.financingBuy)} |`,
-    `| 当日融资偿还额 | ${formatYi(snapshot.financingRepay)} |`,
-    `| 当日融资净买入额 | ${formatYi(snapshot.financingNetBuy)} |`,
-    `| 5日融资净买入累计 | ${formatYi(signal.financingNetBuy5d)} |`,
-    `| 10日融资净买入累计 | ${formatYi(signal.financingNetBuy10d)} |`,
-    snapshot.marketVolumeShares ? `| A股成交量 | ${formatYiShares(snapshot.marketVolumeShares)} |` : undefined,
-    `| 融资余额占两融余额比重 | ${financingShare}% |`,
-    `| 融券余额占两融余额比重 | ${lendingShare}% |`,
-    '',
-    '## 四、今日 vs 昨日',
-    '',
-    previousSnapshot ? buildDayOverDayTable(snapshot, previousSnapshot) : '- 当前库中缺少昨日快照，因此暂不展示日环比对比。',
-    '',
-    '## 五、今日 vs 历史中位数 / 本月均值',
-    '',
-    comparisonRows.length > 0 ? buildMedianAndMonthlyTable(comparisonRows) : '- 当前库中可用历史不足，暂不展示历史中位数与本月均值对比。',
-    '',
-    '## 六、历史位置与预警解释',
-    '',
-    percentileNarrative(signal),
-    '',
-    alertNarrative(snapshot, signal),
-    '',
-    '## 七、观察与备注',
-    '',
-    '- 第一版只覆盖全市场总览，不覆盖行业、宽基与个股。',
-    '- 若交易所页面结构变化，官方数据可能暂时降级为东方财富补位。',
-    '- 融券指标在当前制度环境下更适合作为辅助解释项，不建议单独用于判断市场方向。',
-    '- 若你看到日报显著偏热/偏冷，建议结合成交额、指数位置与后续几日融资净买入持续性一起判断。',
-    '',
+    snapshot.marketVolumeShares ? 'A股成交量：补充使用腾讯公开A股指数日线（上证A股指数 + 深证A指）估算。' : undefined,
   ].filter((item): item is string => item !== undefined);
 
-  return lines.join('\n');
+  const marketRows = [
+    ['融资余额', formatYi(snapshot.financingBalance)],
+    ['融券余额', formatYi(snapshot.securitiesLendingBalance)],
+    ['两融余额', formatYi(snapshot.marginBalanceTotal)],
+    ['当日融资买入额', formatYi(snapshot.financingBuy)],
+    ['当日融资偿还额', formatYi(snapshot.financingRepay)],
+    ['当日融资净买入额', formatYi(snapshot.financingNetBuy)],
+    ['5日融资净买入累计', formatYi(signal.financingNetBuy5d)],
+    ['10日融资净买入累计', formatYi(signal.financingNetBuy10d)],
+    ...(snapshot.marketVolumeShares ? [['A股成交量', formatYiShares(snapshot.marketVolumeShares)]] as Array<[string, string]> : []),
+    ['融资余额占两融余额比重', `${financingShare}%`],
+    ['融券余额占两融余额比重', `${lendingShare}%`],
+  ];
+
+  const historyItems = percentileNarrative(signal).split('\n').filter(Boolean);
+  const noteItems = [
+    '第一版只覆盖全市场总览，不覆盖行业、宽基与个股。',
+    '若交易所页面结构变化，官方数据可能暂时降级为东方财富补位。',
+    '融券指标在当前制度环境下更适合作为辅助解释项，不建议单独用于判断市场方向。',
+    '若你看到日报显著偏热/偏冷，建议结合成交额、指数位置与后续几日融资净买入持续性一起判断。',
+  ];
+
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A股两融情绪日报详细版</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; margin: 0; background: #f5f7fb; color: #111827; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; }
+    .card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); margin-bottom: 20px; }
+    h1, h2 { margin-top: 0; }
+    .meta { color: #64748b; line-height: 1.9; }
+    .headline { font-size: 18px; font-weight: 700; line-height: 1.8; }
+    .kv-list { line-height: 1.9; margin-top: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; font-weight: 700; }
+    ul { margin: 0; padding-left: 20px; line-height: 1.9; }
+    a { color: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>A股两融情绪日报详细版</h1>
+      <div class="meta">
+        <div><strong>生成时间：</strong>${escapeHtml(generatedAt.toISOString())}</div>
+        <div><strong>交易日期：</strong>${escapeHtml(tradeDate)}</div>
+        ${input.reportUrl ? `<div><strong>报告链接：</strong><a href="${escapeHtml(input.reportUrl)}">${escapeHtml(input.reportUrl)}</a></div>` : ''}
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>一、核心判断</h2>
+      <div class="headline">${formatMultilineText(summary)}</div>
+      <div class="kv-list">
+        <div>情绪标签：${escapeHtml(SENTIMENT_LABELS[signal.sentimentLevel])}</div>
+        <div>当前触发状态：${escapeHtml(ALERT_LABELS[signal.alertState])}</div>
+        <div>融资余额历史分位：${escapeHtml(formatPct(signal.financingBalancePct250))}</div>
+        <div>5日融资净买入历史分位：${escapeHtml(formatPct(signal.financingNetBuy5dPct250))}</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>二、数据来源与采用口径</h2>
+      ${listHtml(sourceItems)}
+    </section>
+
+    <section class="card">
+      <h2>三、市场总览</h2>
+      <table>
+        <thead><tr><th>指标</th><th>数值</th></tr></thead>
+        <tbody>${marketRows.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>四、今日 vs 昨日</h2>
+      ${previousSnapshot ? buildDayOverDayTable(snapshot, previousSnapshot) : '<p>当前库中缺少昨日快照，因此暂不展示日环比对比。</p>'}
+    </section>
+
+    <section class="card">
+      <h2>五、今日 vs 历史中位数 / 本月均值</h2>
+      ${comparisonRows.length > 0 ? buildMedianAndMonthlyTable(comparisonRows) : '<p>当前库中可用历史不足，暂不展示历史中位数与本月均值对比。</p>'}
+    </section>
+
+    <section class="card">
+      <h2>六、历史位置与预警解释</h2>
+      ${listHtml(historyItems)}
+      <p>${formatMultilineText(alertNarrative(snapshot, signal))}</p>
+    </section>
+
+    <section class="card">
+      <h2>七、观察与备注</h2>
+      ${listHtml(noteItems)}
+    </section>
+  </div>
+</body>
+</html>`;
 }
 
 function buildDayOverDayTable(today: MarketDailySnapshot, previous: MarketDailySnapshot): string {
   const rows = [
-    '| 指标 | 今日 | 昨日 | 变化 |',
-    '| --- | --- | --- | --- |',
-    `| 融资余额 | ${formatYi(today.financingBalance)} | ${formatYi(previous.financingBalance)} | ${formatRelativeChangeText(today.financingBalance, previous.financingBalance)} |`,
-    `| 融券余额 | ${formatYi(today.securitiesLendingBalance)} | ${formatYi(previous.securitiesLendingBalance)} | ${formatRelativeChangeText(today.securitiesLendingBalance, previous.securitiesLendingBalance)} |`,
-    `| 两融余额 | ${formatYi(today.marginBalanceTotal)} | ${formatYi(previous.marginBalanceTotal)} | ${formatRelativeChangeText(today.marginBalanceTotal, previous.marginBalanceTotal)} |`,
-    `| 当日融资买入额 | ${formatYi(today.financingBuy)} | ${formatYi(previous.financingBuy)} | ${formatRelativeChangeText(today.financingBuy, previous.financingBuy)} |`,
-    `| 当日融资偿还额 | ${formatYi(today.financingRepay)} | ${formatYi(previous.financingRepay)} | ${formatRelativeChangeText(today.financingRepay, previous.financingRepay)} |`,
-    `| 当日融资净买入额 | ${formatYi(today.financingNetBuy)} | ${formatYi(previous.financingNetBuy)} | ${formatRelativeChangeText(today.financingNetBuy, previous.financingNetBuy)} |`,
-  ];
+    ['融资余额', formatYi(today.financingBalance), formatYi(previous.financingBalance), formatRelativeChangeText(today.financingBalance, previous.financingBalance)],
+    ['融券余额', formatYi(today.securitiesLendingBalance), formatYi(previous.securitiesLendingBalance), formatRelativeChangeText(today.securitiesLendingBalance, previous.securitiesLendingBalance)],
+    ['两融余额', formatYi(today.marginBalanceTotal), formatYi(previous.marginBalanceTotal), formatRelativeChangeText(today.marginBalanceTotal, previous.marginBalanceTotal)],
+    ['当日融资买入额', formatYi(today.financingBuy), formatYi(previous.financingBuy), formatRelativeChangeText(today.financingBuy, previous.financingBuy)],
+    ['当日融资偿还额', formatYi(today.financingRepay), formatYi(previous.financingRepay), formatRelativeChangeText(today.financingRepay, previous.financingRepay)],
+    ['当日融资净买入额', formatYi(today.financingNetBuy), formatYi(previous.financingNetBuy), formatRelativeChangeText(today.financingNetBuy, previous.financingNetBuy)],
+  ] as Array<[string, string, string, string]>;
 
   if (typeof today.marketVolumeShares === 'number' && typeof previous.marketVolumeShares === 'number') {
-    rows.push(`| A股成交量 | ${formatYiShares(today.marketVolumeShares)} | ${formatYiShares(previous.marketVolumeShares)} | ${formatRelativeChangeText(today.marketVolumeShares, previous.marketVolumeShares)} |`);
+    rows.push(['A股成交量', formatYiShares(today.marketVolumeShares), formatYiShares(previous.marketVolumeShares), formatRelativeChangeText(today.marketVolumeShares, previous.marketVolumeShares)]);
   }
 
-  return rows.join('\n');
+  return `<table>
+    <thead><tr><th>指标</th><th>今日</th><th>昨日</th><th>变化</th></tr></thead>
+    <tbody>${rows.map(([label, current, previousValue, delta]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(current)}</td><td>${escapeHtml(previousValue)}</td><td>${escapeHtml(delta)}</td></tr>`).join('')}</tbody>
+  </table>`;
 }
 
 function buildMedianAndMonthlyTable(rows: ReturnType<typeof buildMetricComparisonRows>): string {
-  return [
-    '| 指标 | 今日 | 历史中位数 | 较中位数 | 本月均值 | 较本月均值 |',
-    '| --- | --- | --- | --- | --- | --- |',
-    ...rows.map((row) => `| ${row.label} | ${row.currentText} | ${row.medianText} | ${row.medianChangeText} | ${row.monthAverageText} | ${row.monthAverageChangeText} |`),
-  ].join('\n');
+  return `<table>
+    <thead><tr><th>指标</th><th>今日</th><th>历史中位数</th><th>较中位数</th><th>本月均值</th><th>较本月均值</th></tr></thead>
+    <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.label)}</td><td>${escapeHtml(row.currentText)}</td><td>${escapeHtml(row.medianText)}</td><td>${escapeHtml(row.medianChangeText)}</td><td>${escapeHtml(row.monthAverageText)}</td><td>${escapeHtml(row.monthAverageChangeText)}</td></tr>`).join('')}</tbody>
+  </table>`;
 }
 
 function formatYi(value: number): string {

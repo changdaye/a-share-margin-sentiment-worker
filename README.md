@@ -2,7 +2,7 @@
 
 一个基于 **Cloudflare Workers + D1 + KV + Workers AI** 的 A 股两融全市场情绪日报项目。
 
-它会在 **每天 17:00（Asia/Shanghai）** 拉取全市场两融总览，优先使用 **上交所 / 深交所官方数据**，在官方数据不足时回退到 **东方财富聚合数据**，生成一条飞书收盘总结，并将详细版 Markdown 报告上传到 **腾讯云 COS**。
+它会在 **每天 17:00（Asia/Shanghai）** 拉取全市场两融总览，优先使用 **上交所 / 深交所官方数据**，在官方数据不足时回退到 **东方财富聚合数据**，生成一条飞书收盘总结，并将详细版 HTML 报告上传到 **腾讯云 COS**。
 
 ## 功能
 
@@ -11,7 +11,7 @@
 - 融资为主、融券为辅的市场情绪判断
 - 补充跟踪 A 股每日成交量（上证A股指数 + 深证A指）
 - 命中过热 / 转冷规则时额外发送预警
-- 详细版 Markdown 报告上传腾讯云 COS
+- 详细版 HTML 报告上传腾讯云 COS
 - 使用 Workers AI 生成中文摘要
 - 24 小时心跳
 - 连续失败告警
@@ -81,10 +81,10 @@ npm run backfill:recent:remote
 
 ### 详细版报告
 
-详细版 Markdown 报告会上传到腾讯云 COS，key 规则为：
+详细版 HTML 报告会上传到腾讯云 COS，key 规则为：
 
 - 前缀：`a-share-margin-sentiment-worker/`
-- 文件名：UTC 时间戳（`YYYYMMDDHHMMSS.md`）
+- 文件名：UTC 时间戳（`YYYYMMDDHHMMSS.html`）
 
 ## 本地开发
 
