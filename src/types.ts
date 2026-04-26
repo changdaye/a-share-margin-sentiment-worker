@@ -49,6 +49,11 @@ export interface AppConfig {
   llmModel: string;
 }
 
+export interface LLMHeadlineResult {
+  headline: string;
+  modelLabel: string;
+}
+
 export interface SourceSnapshot {
   tradeDate: string;
   financingBalance?: number;

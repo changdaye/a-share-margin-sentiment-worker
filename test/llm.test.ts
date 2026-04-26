@@ -76,7 +76,7 @@ describe('summarizeWithLLM', () => {
       makeSignal(),
     );
 
-    expect(result).toBe('杠杆情绪继续升温，短线仍偏热。');
+    expect(result).toEqual({ headline: '杠杆情绪继续升温，短线仍偏热。', modelLabel: 'GPT 5.4 (xhigh)' });
     const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
     expect(body.model).toBe('gpt-5.4');
     expect(body.reasoning_effort).toBe('xhigh');
@@ -95,7 +95,7 @@ describe('summarizeWithLLM', () => {
       makeSignal(),
     );
 
-    expect(result).toBe('杠杆资金边走边看，情绪仍偏热。');
+    expect(result).toEqual({ headline: '杠杆资金边走边看，情绪仍偏热。', modelLabel: 'Llama 3.2 1B Instruct' });
     expect(run).toHaveBeenCalledTimes(1);
     expect(run.mock.calls[0]?.[0]).toBe('@cf/meta/llama-3.2-1b-instruct');
   });

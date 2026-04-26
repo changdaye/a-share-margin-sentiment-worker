@@ -1,4 +1,4 @@
-import type { AppConfig, MarketDailySnapshot, MarketSignal } from '../types';
+import type { AppConfig, LLMHeadlineResult, MarketDailySnapshot, MarketSignal } from '../types';
 
 const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.2-1b-instruct';
 const OPENAI_COMPAT_REASONING_EFFORT = 'xhigh';
@@ -28,7 +28,7 @@ export async function summarizeWithLLM(
   snapshot: MarketDailySnapshot,
   signal: MarketSignal,
   previousSnapshot?: MarketDailySnapshot,
-): Promise<string> {
+): Promise<LLMHeadlineResult> {
   const payload = [
     `交易日期: ${snapshot.tradeDate}`,
     `融资余额: ${snapshot.financingBalance}`,
@@ -62,7 +62,7 @@ export async function summarizeWithLLM(
   );
 }
 
-async function summarizeWithOpenAICompatible(config: AppConfig, payload: string): Promise<string> {
+async function summarizeWithOpenAICompatible(config: AppConfig, payload: string): Promise<LLMHeadlineResult> {
   const response = await fetch(`${config.llmBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -93,10 +93,13 @@ async function summarizeWithOpenAICompatible(config: AppConfig, payload: string)
     ? rawContent.trim()
     : rawContent?.map((part) => part.text ?? '').join('').trim();
   if (!content) throw new Error('OpenAI-compatible response returned empty content');
-  return normalizeHeadline(content);
+  return {
+    headline: normalizeHeadline(content),
+    modelLabel: `${formatModelLabel(config.llmModel)} (${OPENAI_COMPAT_REASONING_EFFORT})`,
+  };
 }
 
-async function summarizeWithWorkersAI(ai: Ai, model: string, payload: string): Promise<string> {
+async function summarizeWithWorkersAI(ai: Ai, model: string, payload: string): Promise<LLMHeadlineResult> {
   const result = await ai.run(model, {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -108,9 +111,39 @@ async function summarizeWithWorkersAI(ai: Ai, model: string, payload: string): P
 
   const content = result.response?.trim();
   if (!content) throw new Error('Workers AI returned empty response');
-  return normalizeHeadline(content);
+  return {
+    headline: normalizeHeadline(content),
+    modelLabel: formatModelLabel(model),
+  };
 }
 
 function normalizeHeadline(content: string): string {
   return content.replace(/^[#\-\d.、\s]+/, '').split('\n')[0].trim();
+}
+
+function formatModelLabel(model: string): string {
+  const trimmed = model.trim();
+  if (!trimmed) return 'Unknown';
+  const slug = trimmed.replace(/^@cf\//, '').split('/').pop() ?? trimmed;
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (lower === 'gpt') return 'GPT';
+      if (lower === 'llama') return 'Llama';
+      if (lower === 'qwen') return 'Qwen';
+      if (lower === 'gemma') return 'Gemma';
+      if (lower === 'glm') return 'GLM';
+      if (lower === 'mistral') return 'Mistral';
+      if (lower === 'kimi') return 'Kimi';
+      if (lower === 'deepseek') return 'DeepSeek';
+      if (lower === 'fp8') return 'FP8';
+      if (lower === 'awq') return 'AWQ';
+      if (lower === 'it') return 'IT';
+      if (/^\d+(\.\d+)?b$/i.test(part)) return part.toUpperCase();
+      if (/^\d+(\.\d+)?$/.test(part)) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(' ');
 }

@@ -94,7 +94,7 @@ async function fetchSources(env: Env) {
   return { config, sse, szse, eastmoney, marketVolume };
 }
 
-export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailySnapshot; signal: MarketSignal; reportUrl: string }> {
+export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailySnapshot; signal: MarketSignal; reportUrl: string; modelLabel: string }> {
   const { config, sse, szse, eastmoney, marketVolume } = await fetchSources(env);
   const runtime = await getRuntimeState(env.RUNTIME_KV);
   const now = new Date();
@@ -120,8 +120,11 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
     }));
 
     let headline = fallbackHeadline(signal);
+    let modelLabel = '';
     try {
-      headline = await summarizeWithLLM(config, env.AI, snapshot, signal, previousSnapshot);
+      const llmResult = await summarizeWithLLM(config, env.AI, snapshot, signal, previousSnapshot);
+      headline = llmResult.headline;
+      modelLabel = llmResult.modelLabel;
     } catch {
       headline = fallbackHeadline(signal);
     }
@@ -143,7 +146,7 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
     const uploaded = await uploadDetailedReportToCos(config, report, now);
     await saveDetailedReportCopy(env.RUNTIME_KV, uploaded.key, report);
     const publicReportUrl = buildDetailedReportPublicUrl(config.workerPublicBaseUrl, uploaded.key);
-    const dailyMessage = buildDailyMessage(summary, publicReportUrl);
+    const dailyMessage = buildDailyMessage(summary, publicReportUrl, modelLabel);
     await pushToFeishu(config, dailyMessage);
     await insertNotificationRun(env.WATCHER_DB, {
       id: crypto.randomUUID(),
@@ -156,7 +159,7 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
 
     let nextState: RuntimeState = recordSuccess(runtime, now);
     if (enrichedSignal.alertState !== 'none' && shouldSendDirectionalAlert(nextState, enrichedSignal.alertState as Exclude<AlertState, 'none'>, config.alertCooldownHours, now)) {
-      const alertMessage = buildAlertMessage(enrichedSignal.alertState as Exclude<AlertState, 'none'>, alertReason(enrichedSignal), publicReportUrl);
+      const alertMessage = buildAlertMessage(enrichedSignal.alertState as Exclude<AlertState, 'none'>, alertReason(enrichedSignal), publicReportUrl, modelLabel);
       await pushToFeishu(config, alertMessage);
       await insertNotificationRun(env.WATCHER_DB, {
         id: crypto.randomUUID(),
@@ -184,7 +187,7 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
     }
 
     await setRuntimeState(env.RUNTIME_KV, nextState);
-    return { snapshot, signal: enrichedSignal, reportUrl: publicReportUrl };
+    return { snapshot, signal: enrichedSignal, reportUrl: publicReportUrl, modelLabel };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     let nextState = recordFailure(runtime, detail, now);
@@ -218,7 +221,7 @@ export default {
       const auth = authorizeAdminRequest(request, parseConfig(env).manualTriggerToken);
       if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
       const result = await runDailyDigest(env);
-      return json({ ok: true, tradeDate: result.snapshot.tradeDate, alertState: result.signal.alertState, reportUrl: result.reportUrl });
+      return json({ ok: true, tradeDate: result.snapshot.tradeDate, alertState: result.signal.alertState, reportUrl: result.reportUrl, modelLabel: result.modelLabel });
     }
 
     return json({ ok: false, error: 'not found' }, 404);

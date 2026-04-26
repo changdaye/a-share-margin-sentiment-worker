@@ -1,12 +1,19 @@
 import type { AlertState, RuntimeState } from '../types';
 
-export function buildDailyMessage(summary: string, reportUrl: string): string {
-  return `${normalizeForFeishu(summary)}\n\n详细版报告:\n${reportUrl}`;
+export function buildDailyMessage(summary: string, reportUrl: string, modelLabel = ''): string {
+  const sections = modelLabel
+    ? [`🤖 模型：${modelLabel}`, normalizeForFeishu(summary), `详细版报告:\n${reportUrl}`]
+    : [normalizeForFeishu(summary), `详细版报告:\n${reportUrl}`];
+  return sections.join('\n\n');
 }
 
-export function buildAlertMessage(direction: Exclude<AlertState, 'none'>, reason: string, reportUrl: string): string {
+export function buildAlertMessage(direction: Exclude<AlertState, 'none'>, reason: string, reportUrl: string, modelLabel = ''): string {
   const title = direction === 'overheat' ? '两融过热预警' : '两融转冷预警';
-  return `${title}\n${normalizeForFeishu(`触发原因：${reason}`)}\n\n详细版报告:\n${reportUrl}`;
+  const body = `${title}\n${normalizeForFeishu(`触发原因：${reason}`)}`;
+  const sections = modelLabel
+    ? [`🤖 模型：${modelLabel}`, body, `详细版报告:\n${reportUrl}`]
+    : [body, `详细版报告:\n${reportUrl}`];
+  return sections.join('\n\n');
 }
 
 export function buildHeartbeatMessage(state: RuntimeState, intervalHours: number): string {
