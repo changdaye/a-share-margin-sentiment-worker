@@ -37,6 +37,8 @@ describe('parseConfig', () => {
     expect(config.lookbackDays).toBe(250);
     expect(config.cosBaseUrl).toContain('myqcloud.com');
     expect(config.workerPublicBaseUrl).toBe('https://a-share-margin-sentiment-worker.wanggejiancai822.workers.dev');
+    expect(config.llmBaseUrl).toBe('');
+    expect(config.llmApiKey).toBe('');
   });
 
   it('throws when Feishu webhook is missing', () => {

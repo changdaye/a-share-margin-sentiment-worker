@@ -43,6 +43,6 @@
     "ALERT_COOLDOWN_HOURS": "24",
     "FAILURE_ALERT_THRESHOLD": "1",
     "FAILURE_ALERT_COOLDOWN_MINUTES": "180",
-    "LLM_MODEL": "@cf/meta/llama-3.1-8b-instruct"
+    "LLM_MODEL": "gpt-5.4"
   }
 }

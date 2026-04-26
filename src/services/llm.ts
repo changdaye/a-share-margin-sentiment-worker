@@ -1,7 +1,19 @@
 import type { AppConfig, MarketDailySnapshot, MarketSignal } from '../types';
 
+const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.2-1b-instruct';
+const OPENAI_COMPAT_REASONING_EFFORT = 'xhigh';
+const OPENAI_COMPAT_MAX_COMPLETION_TOKENS = 180;
+
 interface WorkersAIResult {
   response?: string;
+}
+
+interface OpenAICompatResponse {
+  choices?: Array<{
+    message?: {
+      content?: string | Array<{ type?: string; text?: string }>;
+    };
+  }>;
 }
 
 const SYSTEM_PROMPT = `你是一名中文财经编辑。请根据A股两融市场级指标，输出一句像人写的盘后点评标题。要求：
@@ -35,7 +47,57 @@ export async function summarizeWithLLM(
     typeof previousSnapshot?.marketVolumeShares === 'number' ? `昨日A股成交量: ${previousSnapshot.marketVolumeShares}` : '',
   ].filter(Boolean).join('\n');
 
-  const result = await ai.run(config.llmModel, {
+  if (config.llmBaseUrl && config.llmApiKey) {
+    try {
+      return await summarizeWithOpenAICompatible(config, payload);
+    } catch (error) {
+      console.error('OpenAI-compatible LLM failed', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  return summarizeWithWorkersAI(
+    ai,
+    config.llmModel.startsWith('@cf/') ? config.llmModel : DEFAULT_WORKERS_AI_MODEL,
+    payload,
+  );
+}
+
+async function summarizeWithOpenAICompatible(config: AppConfig, payload: string): Promise<string> {
+  const response = await fetch(`${config.llmBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.llmApiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.llmModel,
+      reasoning_effort: OPENAI_COMPAT_REASONING_EFFORT,
+      max_completion_tokens: OPENAI_COMPAT_MAX_COMPLETION_TOKENS,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: payload },
+      ],
+      max_tokens: 120,
+      temperature: 0.2,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OpenAI-compatible HTTP ${response.status}: ${text.slice(0, 500)}`);
+  }
+
+  const result = await response.json() as OpenAICompatResponse;
+  const rawContent = result.choices?.[0]?.message?.content;
+  const content = typeof rawContent === 'string'
+    ? rawContent.trim()
+    : rawContent?.map((part) => part.text ?? '').join('').trim();
+  if (!content) throw new Error('OpenAI-compatible response returned empty content');
+  return normalizeHeadline(content);
+}
+
+async function summarizeWithWorkersAI(ai: Ai, model: string, payload: string): Promise<string> {
+  const result = await ai.run(model, {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: payload },
@@ -46,5 +108,9 @@ export async function summarizeWithLLM(
 
   const content = result.response?.trim();
   if (!content) throw new Error('Workers AI returned empty response');
+  return normalizeHeadline(content);
+}
+
+function normalizeHeadline(content: string): string {
   return content.replace(/^[#\-\d.、\s]+/, '').split('\n')[0].trim();
 }
