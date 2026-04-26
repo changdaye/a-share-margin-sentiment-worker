@@ -10,6 +10,7 @@ export interface Env {
   TENCENT_COS_BUCKET: string;
   TENCENT_COS_REGION: string;
   TENCENT_COS_BASE_URL?: string;
+  WORKER_PUBLIC_BASE_URL?: string;
   RUN_HOUR_LOCAL?: string;
   RUN_MINUTE_LOCAL?: string;
   MARKET_TIMEZONE?: string;
@@ -31,6 +32,7 @@ export interface AppConfig {
   cosBucket: string;
   cosRegion: string;
   cosBaseUrl: string;
+  workerPublicBaseUrl: string;
   runHourLocal: number;
   runMinuteLocal: number;
   marketTimezone: string;

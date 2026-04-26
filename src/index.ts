@@ -5,6 +5,7 @@ import { buildComparisonNarrative, buildMetricComparisonRows, formatRelativeChan
 import { buildSignal } from './lib/signals';
 import { buildAlertMessage, buildDailyMessage, buildFailureAlertMessage, buildHeartbeatMessage } from './lib/message';
 import { buildDetailedReport } from './lib/report';
+import { buildDetailedReportPublicUrl, maybeHandleDetailedReportRequest, saveDetailedReportCopy } from './lib/report-storage';
 import { getRuntimeState, recordFailure, recordSuccess, setRuntimeState, shouldSendDirectionalAlert, shouldSendFailureAlert, shouldSendHeartbeat } from './lib/runtime';
 import { uploadDetailedReportToCos } from './services/cos';
 import { fetchAshareMarketVolume } from './services/a-share-volume';
@@ -140,20 +141,22 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
       signal: enrichedSignal,
     });
     const uploaded = await uploadDetailedReportToCos(config, report, now);
-    const dailyMessage = buildDailyMessage(summary, uploaded.url);
+    await saveDetailedReportCopy(env.RUNTIME_KV, uploaded.key, report);
+    const publicReportUrl = buildDetailedReportPublicUrl(config.workerPublicBaseUrl, uploaded.key);
+    const dailyMessage = buildDailyMessage(summary, publicReportUrl);
     await pushToFeishu(config, dailyMessage);
     await insertNotificationRun(env.WATCHER_DB, {
       id: crypto.randomUUID(),
       tradeDate: snapshot.tradeDate,
       runType: 'daily_summary',
       messageText: dailyMessage,
-      reportUrl: uploaded.url,
+      reportUrl: publicReportUrl,
       feishuPushOk: true,
     });
 
     let nextState: RuntimeState = recordSuccess(runtime, now);
     if (enrichedSignal.alertState !== 'none' && shouldSendDirectionalAlert(nextState, enrichedSignal.alertState as Exclude<AlertState, 'none'>, config.alertCooldownHours, now)) {
-      const alertMessage = buildAlertMessage(enrichedSignal.alertState as Exclude<AlertState, 'none'>, alertReason(enrichedSignal), uploaded.url);
+      const alertMessage = buildAlertMessage(enrichedSignal.alertState as Exclude<AlertState, 'none'>, alertReason(enrichedSignal), publicReportUrl);
       await pushToFeishu(config, alertMessage);
       await insertNotificationRun(env.WATCHER_DB, {
         id: crypto.randomUUID(),
@@ -161,7 +164,7 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
         runType: 'alert',
         alertDirection: enrichedSignal.alertState,
         messageText: alertMessage,
-        reportUrl: uploaded.url,
+        reportUrl: publicReportUrl,
         feishuPushOk: true,
       });
       nextState = { ...nextState, lastAlertAt: now.toISOString(), lastAlertDirection: enrichedSignal.alertState };
@@ -181,7 +184,7 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
     }
 
     await setRuntimeState(env.RUNTIME_KV, nextState);
-    return { snapshot, signal: enrichedSignal, reportUrl: uploaded.url };
+    return { snapshot, signal: enrichedSignal, reportUrl: publicReportUrl };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     let nextState = recordFailure(runtime, detail, now);
@@ -202,6 +205,11 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === 'GET') {
+      const reportResponse = await maybeHandleDetailedReportRequest(request, env.RUNTIME_KV);
+      if (reportResponse) return reportResponse;
+    }
+
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
       return json({ ok: true, runtimeState: await getRuntimeState(env.RUNTIME_KV) });
     }

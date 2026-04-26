@@ -3,7 +3,7 @@
   "name": "a-share-margin-sentiment-worker",
   "main": "src/index.ts",
   "compatibility_date": "2026-04-24",
-  "account_id": "6ef22eafdfaea04ccc59c7a4d85a087c",
+  "account_id": "905ebcafff7f6fb7c62a6226887da305",
   "workers_dev": true,
   "preview_urls": false,
   "observability": {
@@ -20,15 +20,15 @@
   "kv_namespaces": [
     {
       "binding": "RUNTIME_KV",
-      "id": "5b4680e64da141fda737fb21949c82e4",
-      "preview_id": "4666b9f426284274b4a0a4f9120979bd"
+      "id": "2821fa8bc90f421aaf8d1a8705f695c5",
+      "preview_id": "2821fa8bc90f421aaf8d1a8705f695c5"
     }
   ],
   "d1_databases": [
     {
       "binding": "WATCHER_DB",
       "database_name": "a-share-margin-sentiment-worker",
-      "database_id": "e2419b54-d88b-4760-86d7-b0db6fe75fce",
+      "database_id": "7549ecf4-d3ec-4ff8-bfe1-6496ffab92bd",
       "migrations_dir": "migrations"
     }
   ],

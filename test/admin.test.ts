@@ -134,7 +134,7 @@ describe('admin routes', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as any;
     expect(body.ok).toBe(true);
-    expect(body.reportUrl).toContain('myqcloud.com');
+    expect(body.reportUrl).toContain('workers.dev/reports/a-share-margin-sentiment-worker/');
     expect(db.snapshots).toHaveLength(1);
     expect(db.snapshots[0]?.market_volume_shares).toBe(131393668700);
     expect(db.notifications.length).toBeGreaterThanOrEqual(1);
