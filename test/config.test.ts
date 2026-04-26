@@ -36,6 +36,7 @@ describe('parseConfig', () => {
     expect(config.marketTimezone).toBe('Asia/Shanghai');
     expect(config.lookbackDays).toBe(250);
     expect(config.cosBaseUrl).toContain('myqcloud.com');
+    expect(config.workerPublicBaseUrl).toBe('https://a-share-margin-sentiment-worker.wanggejiancai822.workers.dev');
   });
 
   it('throws when Feishu webhook is missing', () => {

@@ -21,7 +21,7 @@ export function parseConfig(env: Env): AppConfig {
     cosRegion: region,
     cosBaseUrl: env.TENCENT_COS_BASE_URL?.trim() || `https://${bucket}.cos.${region}.myqcloud.com`,
 
-    workerPublicBaseUrl: env.WORKER_PUBLIC_BASE_URL?.trim() || "https://a-share-margin-sentiment-worker.qingjiaowochangdaye.workers.dev",
+    workerPublicBaseUrl: env.WORKER_PUBLIC_BASE_URL?.trim() || 'https://a-share-margin-sentiment-worker.wanggejiancai822.workers.dev',
     runHourLocal: toInt(env.RUN_HOUR_LOCAL, 17, 0),
     runMinuteLocal: toInt(env.RUN_MINUTE_LOCAL, 0, 0),
     marketTimezone: env.MARKET_TIMEZONE?.trim() || 'Asia/Shanghai',
