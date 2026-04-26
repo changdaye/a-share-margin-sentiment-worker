@@ -138,6 +138,7 @@ export async function runDailyDigest(env: Env): Promise<{ snapshot: MarketDailyS
       generatedAt: now,
       tradeDate: snapshot.tradeDate,
       summary,
+      modelLabel,
       snapshot,
       previousSnapshot,
       historicalSnapshots: historyRows,

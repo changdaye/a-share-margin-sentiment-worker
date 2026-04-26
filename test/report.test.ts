@@ -11,6 +11,7 @@ describe('report helpers', () => {
       generatedAt: new Date('2026-04-24T01:02:03Z'),
       tradeDate: '2026-04-23',
       summary: '杠杆资金延续升温，盘后情绪仍偏热。',
+      modelLabel: 'GPT 5.4 (xhigh)',
       reportUrl: 'https://cos.example/report.html',
       snapshot: {
         tradeDate: '2026-04-23',
@@ -136,6 +137,7 @@ describe('report helpers', () => {
     });
 
     expect(report).toContain('<!doctype html>');
+    expect(report).toContain('模型：</strong>GPT 5.4 (xhigh)');
     expect(report).toContain('<h2>一、核心判断</h2>');
     expect(report).toContain('<h2>二、数据来源与采用口径</h2>');
     expect(report).toContain('<h2>三、市场总览</h2>');

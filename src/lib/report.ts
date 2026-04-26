@@ -50,6 +50,7 @@ export function buildDetailedReport(input: {
   generatedAt: Date;
   tradeDate: string;
   summary: string;
+  modelLabel?: string;
   reportUrl?: string;
   snapshot: MarketDailySnapshot;
   previousSnapshot?: MarketDailySnapshot;
@@ -128,6 +129,7 @@ export function buildDetailedReport(input: {
       <div class="meta">
         <div><strong>生成时间：</strong>${escapeHtml(generatedAt.toISOString())}</div>
         <div><strong>交易日期：</strong>${escapeHtml(tradeDate)}</div>
+        ${input.modelLabel ? `<div><strong>模型：</strong>${escapeHtml(input.modelLabel)}</div>` : ''}
         ${input.reportUrl ? `<div><strong>报告链接：</strong><a href="${escapeHtml(input.reportUrl)}">${escapeHtml(input.reportUrl)}</a></div>` : ''}
       </div>
     </section>
