@@ -53,9 +53,6 @@ export function buildFeishuMessageObjectKey(now = new Date()): string {
   return `${PREFIX}/feishu-messages/${buildUtcStamp(now)}.txt`;
 }
 
-export function buildFinalSummaryObjectKey(now = new Date()): string {
-  return `${PREFIX}/final-summaries/${buildUtcStamp(now)}.txt`;
-}
 
 export function buildDetailedReport(input: {
   generatedAt: Date;

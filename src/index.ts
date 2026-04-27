@@ -8,7 +8,6 @@ import { buildDetailedReport } from './lib/report';
 import { buildDetailedReportPublicUrl, maybeHandleDetailedReportRequest, saveDetailedReportCopy } from './lib/report-storage';
 import { getRuntimeState, recordFailure, recordSuccess, setRuntimeState, shouldSendDirectionalAlert, shouldSendFailureAlert, shouldSendHeartbeat } from './lib/runtime';
 import { uploadDetailedReportToCos, uploadFeishuMessageToCos } from './services/cos';
-import { runFinalSummary } from './services/final-summary';
 import { fetchAshareMarketVolume } from './services/a-share-volume';
 import { fetchEastmoneySummary } from './services/eastmoney';
 import { fetchSseSummary } from './services/exchange-sse';
@@ -217,19 +216,7 @@ export default {
     }
 
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
-      return json({ ok: true, runtimeState: await getRuntimeState(env.RUNTIME_KV), finalSummary: { hourLocal: parseConfig(env).finalSummaryHourLocal, minuteLocal: parseConfig(env).finalSummaryMinuteLocal, lookbackHours: parseConfig(env).finalSummaryLookbackHours } });
-    }
-
-    if (request.method === 'POST' && url.pathname === '/admin/final-summary') {
-      const auth = authorizeAdminRequest(request, parseConfig(env).manualTriggerToken);
-      if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
-      try {
-        const result = await runFinalSummary(env, parseConfig(env));
-        return json({ ok: true, summary: result });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return json({ ok: false, error: message }, 500);
-      }
+      return json({ ok: true, runtimeState: await getRuntimeState(env.RUNTIME_KV) });
     }
 
     if (request.method === 'POST' && url.pathname === '/admin/trigger') {
@@ -243,15 +230,6 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    const config = parseConfig(env);
-    const now = new Date();
-    const [hourPart, minutePart] = new Intl.DateTimeFormat('en-GB', { timeZone: config.marketTimezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(now).split(':');
-    const hour = Number(hourPart);
-    const minute = Number(minutePart);
-    if (hour === config.finalSummaryHourLocal && minute === config.finalSummaryMinuteLocal) {
-      await runFinalSummary(env, config, now);
-      return;
-    }
-    await runDailyDigest(env);
+await runDailyDigest(env);
   },
 };
