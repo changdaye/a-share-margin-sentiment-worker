@@ -34,8 +34,8 @@ function listHtml(items: string[]): string {
   return `<ul>${items.map((item) => `<li>${formatMultilineText(item)}</li>`).join('')}</ul>`;
 }
 
-export function buildDetailedReportObjectKey(now = new Date()): string {
-  const stamp = [
+function buildUtcStamp(now = new Date()): string {
+  return [
     now.getUTCFullYear(),
     String(now.getUTCMonth() + 1).padStart(2, '0'),
     String(now.getUTCDate()).padStart(2, '0'),
@@ -43,7 +43,18 @@ export function buildDetailedReportObjectKey(now = new Date()): string {
     String(now.getUTCMinutes()).padStart(2, '0'),
     String(now.getUTCSeconds()).padStart(2, '0'),
   ].join('');
-  return `${PREFIX}/${stamp}.html`;
+}
+
+export function buildDetailedReportObjectKey(now = new Date()): string {
+  return `${PREFIX}/${buildUtcStamp(now)}.html`;
+}
+
+export function buildFeishuMessageObjectKey(now = new Date()): string {
+  return `${PREFIX}/feishu-messages/${buildUtcStamp(now)}.txt`;
+}
+
+export function buildFinalSummaryObjectKey(now = new Date()): string {
+  return `${PREFIX}/final-summaries/${buildUtcStamp(now)}.txt`;
 }
 
 export function buildDetailedReport(input: {
@@ -240,37 +251,33 @@ function sourceNarrative(snapshot: MarketDailySnapshot): string {
   if (snapshot.sourceStrategy === 'mixed') {
     return '- 深交所官方源当次未成功获取，因此在保持官方优先的前提下，使用东方财富对缺口部分进行补位。';
   }
-  return '- 当次日报未能拿到可用官方汇总，因此暂时使用东方财富聚合数据生成。';
+  return '- 当次官方源均不可用，使用东方财富公开聚合口径生成日报。';
 }
 
 function percentileNarrative(signal: MarketSignal): string {
-  const parts = [
-    `- 融资余额当前位于近似 ${formatPct(signal.financingBalancePct250)} 的历史分位，说明杠杆资金库存处在 ${positionText(signal.financingBalancePct250)}。`,
-    `- 5日融资净买入位于近似 ${formatPct(signal.financingNetBuy5dPct250)} 的历史分位，说明短期杠杆增量处在 ${positionText(signal.financingNetBuy5dPct250)}。`,
+  const lines = [
+    `- 融资余额当前位于近似 ${formatPct(signal.financingBalancePct250)} 的历史分位，说明杠杆资金库存处在 ${bucketLabel(signal.financingBalancePct250)}。`,
+    `- 5日融资净买入位于近似 ${formatPct(signal.financingNetBuy5dPct250)} 的历史分位，说明短期杠杆增量处在 ${bucketLabel(signal.financingNetBuy5dPct250)}。`,
   ];
   if (typeof signal.lendingBalancePct250 === 'number') {
-    parts.push(`- 融券余额分位约为 ${formatPct(signal.lendingBalancePct250)}，当前更多作为辅助背景，不作为主判断依据。`);
+    lines.push(`- 融券余额分位约为 ${formatPct(signal.lendingBalancePct250)}，当前更多作为辅助背景，不作为主判断依据。`);
   }
   if (typeof signal.marketVolumePct250 === 'number') {
-    parts.push(`- A股成交量分位约为 ${formatPct(signal.marketVolumePct250)}，说明交投活跃度处在 ${positionText(signal.marketVolumePct250)}。`);
+    lines.push(`- A股成交量分位约为 ${formatPct(signal.marketVolumePct250)}，说明交投活跃度处在 ${bucketLabel(signal.marketVolumePct250)}。`);
   }
-  return parts.join('\n');
+  return lines.join('\n');
 }
 
-function alertNarrative(snapshot: MarketDailySnapshot, signal: MarketSignal): string {
-  if (signal.alertState === 'overheat') {
-    return `- 当前触发“过热预警”，原因是融资余额与5日融资净买入同时处在高分位区。结合当日融资净买入 ${formatYi(snapshot.financingNetBuy)} 来看，杠杆情绪仍在向上堆积。`;
-  }
-  if (signal.alertState === 'cooling') {
-    return `- 当前触发“转冷预警”，原因是5日融资净买入显著回落并落入低分位区，短期杠杆情绪明显降温。`;
-  }
-  return '- 当前未触发额外预警，说明虽然市场可能偏热或偏冷，但还未越过设定的额外提示阈值。';
+function alertNarrative(_snapshot: MarketDailySnapshot, signal: MarketSignal): string {
+  if (signal.alertState === 'overheat') return '当前已触发过热预警，说明融资余额与短期融资净买入同步处在高位区间。';
+  if (signal.alertState === 'cooling') return '当前已触发转冷预警，说明短期杠杆资金明显回落，需要留意情绪进一步降温。';
+  return '当前未触发额外预警，说明虽然市场可能偏热或偏冷，但还未越过设定的额外提示阈值。';
 }
 
-function positionText(value: number): string {
-  if (value >= 95) return '极高区';
-  if (value >= 75) return '偏高区';
-  if (value <= 10) return '极低区';
-  if (value <= 25) return '偏低区';
-  return '中性区';
+function bucketLabel(pct: number): string {
+  if (pct <= 10) return '极低区';
+  if (pct <= 30) return '偏低区';
+  if (pct < 70) return '中性区';
+  if (pct < 90) return '偏高区';
+  return '极高区';
 }

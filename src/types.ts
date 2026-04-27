@@ -23,6 +23,9 @@ export interface Env {
   FAILURE_ALERT_THRESHOLD?: string;
   FAILURE_ALERT_COOLDOWN_MINUTES?: string;
   LLM_MODEL?: string;
+  FINAL_SUMMARY_HOUR_LOCAL?: string;
+  FINAL_SUMMARY_MINUTE_LOCAL?: string;
+  FINAL_SUMMARY_LOOKBACK_HOURS?: string;
 }
 
 export interface AppConfig {
@@ -47,6 +50,9 @@ export interface AppConfig {
   failureAlertThreshold: number;
   failureAlertCooldownMinutes: number;
   llmModel: string;
+  finalSummaryHourLocal: number;
+  finalSummaryMinuteLocal: number;
+  finalSummaryLookbackHours: number;
 }
 
 export interface LLMHeadlineResult {

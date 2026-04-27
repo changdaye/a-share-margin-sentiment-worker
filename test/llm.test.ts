@@ -25,6 +25,9 @@ function makeConfig(): AppConfig {
     failureAlertThreshold: 1,
     failureAlertCooldownMinutes: 180,
     llmModel: '@cf/meta/llama-3.1-8b-instruct',
+    finalSummaryHourLocal: 0,
+    finalSummaryMinuteLocal: 30,
+    finalSummaryLookbackHours: 24,
   };
 }
 

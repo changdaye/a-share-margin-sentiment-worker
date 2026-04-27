@@ -1,35 +1,67 @@
 import type { AppConfig } from '../types';
-import { buildDetailedReportObjectKey } from '../lib/report';
+import { buildDetailedReportObjectKey, buildFeishuMessageObjectKey, buildFinalSummaryObjectKey } from '../lib/report';
 
 const SIGN_VALID_SECONDS = 3600;
 
 export async function uploadDetailedReportToCos(config: AppConfig, content: string, now = new Date()): Promise<{ key: string; url: string }> {
-  const key = buildDetailedReportObjectKey(now);
-  const baseUrl = config.cosBaseUrl.replace(/\/+$/, '');
-  const objectUrl = `${baseUrl}/${key}`;
+  return uploadTextObjectToCos(config, buildDetailedReportObjectKey(now), content, 'text/html; charset=utf-8', now);
+}
+
+export async function uploadFeishuMessageToCos(config: AppConfig, content: string, now = new Date()): Promise<{ key: string; url: string }> {
+  return uploadTextObjectToCos(config, buildFeishuMessageObjectKey(now), content, 'text/plain; charset=utf-8', now);
+}
+
+export async function uploadFinalSummaryToCos(config: AppConfig, content: string, now = new Date()): Promise<{ key: string; url: string }> {
+  return uploadTextObjectToCos(config, buildFinalSummaryObjectKey(now), content, 'text/plain; charset=utf-8', now);
+}
+
+export async function listCosObjects(config: AppConfig, prefix: string): Promise<Array<{ key: string; lastModified?: string }>> {
+  const url = new URL(`${config.cosBaseUrl.replace(/\/+$/, '')}/`);
+  url.searchParams.set('list-type', '2');
+  url.searchParams.set('prefix', prefix);
+  url.searchParams.set('max-keys', '1000');
+  const response = await signedFetch(config, 'get', url, new Map(), undefined);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`COS list HTTP ${response.status}: ${text.slice(0, 500)}`);
+  }
+  const xml = await response.text();
+  return [...xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)].map((match) => {
+    const block = match[1];
+    const key = decodeXml(block.match(/<Key>([\s\S]*?)<\/Key>/)?.[1] ?? '');
+    const lastModified = decodeXml(block.match(/<LastModified>([\s\S]*?)<\/LastModified>/)?.[1] ?? '');
+    return { key, lastModified: lastModified || undefined };
+  }).filter((item) => item.key);
+}
+
+export async function fetchCosObjectText(config: AppConfig, key: string): Promise<string> {
+  const url = new URL(`${config.cosBaseUrl.replace(/\/+$/, '')}/${key}`);
+  const response = await signedFetch(config, 'get', url, new Map(), undefined);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`COS object HTTP ${response.status}: ${text.slice(0, 500)}`);
+  }
+  return response.text();
+}
+
+async function uploadTextObjectToCos(config: AppConfig, key: string, content: string, contentType: string, now: Date): Promise<{ key: string; url: string }> {
+  const objectUrl = `${config.cosBaseUrl.replace(/\/+$/, '')}/${key}`;
   const url = new URL(objectUrl);
-  const contentType = 'text/html; charset=utf-8';
-  const date = now.toUTCString();
-  const signedHeaders = new Map<string, string>([
-    ['content-type', contentType],
-    ['date', date],
-    ['host', url.host],
-  ]);
-  const authorization = await buildCosAuthorization(config, 'put', url.pathname, signedHeaders, now);
-  const response = await fetch(objectUrl, {
-    method: 'PUT',
-    headers: {
-      Authorization: authorization,
-      Date: date,
-      'Content-Type': contentType,
-    },
-    body: content,
-  });
+  const response = await signedFetch(config, 'put', url, new Map([['content-type', contentType]]), content, now);
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`COS upload HTTP ${response.status}: ${text.slice(0, 500)}`);
   }
   return { key, url: objectUrl };
+}
+
+async function signedFetch(config: AppConfig, method: string, url: URL, extraHeaders: Map<string, string>, body?: string, now = new Date()): Promise<Response> {
+  const date = now.toUTCString();
+  const signedHeaders = new Map<string, string>([['date', date], ['host', url.host], ...extraHeaders.entries()]);
+  const authorization = await buildCosAuthorization(config, method, url.pathname, signedHeaders, now);
+  const headers: Record<string, string> = { Authorization: authorization, Date: date };
+  for (const [key, value] of extraHeaders.entries()) headers[key === 'content-type' ? 'Content-Type' : key] = value;
+  return fetch(url.toString(), { method: method.toUpperCase(), headers, body });
 }
 
 async function buildCosAuthorization(config: AppConfig, method: string, pathname: string, headers: Map<string, string>, now: Date): Promise<string> {
@@ -63,4 +95,8 @@ function toHex(data: ArrayBuffer): string {
 
 function encodeCos(value: string): string {
   return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function decodeXml(value: string): string {
+  return value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 }
